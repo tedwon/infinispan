@@ -18,7 +18,7 @@ import org.testng.annotations.Test;
 @Test(groups = "functional", testName = "eviction.BaseEvictionFunctionalTest")
 public abstract class BaseEvictionFunctionalTest extends SingleCacheManagerTest {
 
-   private static final int CACHE_SIZE=128;
+   private static final int CACHE_SIZE=2;
 
    protected BaseEvictionFunctionalTest() {
       cleanup = CleanupPhase.AFTER_METHOD;
@@ -44,6 +44,10 @@ public abstract class BaseEvictionFunctionalTest extends SingleCacheManagerTest 
       }
       Thread.sleep(1000); // sleep long enough to allow the thread to wake-up
       assert CACHE_SIZE >= cache.size() : "cache size too big: " + cache.size();
+
+      for (int i = 0; i < CACHE_SIZE; i++) {
+         cache.put("key-" + (i + 1), "value-" + (i + 1), 1, TimeUnit.MINUTES);
+      }
    }
 
    public void testSimpleExpirationMaxIdle() throws Exception {

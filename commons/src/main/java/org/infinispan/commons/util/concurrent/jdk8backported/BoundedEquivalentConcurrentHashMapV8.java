@@ -679,6 +679,7 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
 
       @Override
       public Collection<Node<K, V>> findIfEntriesNeedEvicting() {
+         System.out.println("LRU");
 
          long extra;
          while (true) {
@@ -774,10 +775,13 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
       }
 
       public void setStackNode(DequeNode<LIRSNode<K, V>> stackNode) {
+         System.out.println("L778 setStackNode=" + stackNode);
+//         Thread.currentThread().dumpStack();
          this.stackNode = stackNode;
       }
 
       public void setQueueNode(DequeNode<LIRSNode<K, V>> queueNode) {
+         System.out.println("L784 setQueueNode=" + queueNode);
          this.queueNode = queueNode;
       }
 
@@ -924,6 +928,7 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
                   incrementSizeEviction(currentSize, 1, 0);
                }
                DequeNode<LIRSNode<K, V>> stackNode = new DequeNode<>(lirsNode);
+               System.out.println("L928");
                lirsNode.setStackNode(stackNode);
                lirsNode.setState(Recency.LIR_RESIDENT);
                stack.linkLast(stackNode);
@@ -1068,7 +1073,8 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
 
                      // We demote the LIR_RESIDENT to HIR_RESIDENT in the queue (not in stack)
                      removedLIR.setState(Recency.HIR_RESIDENT);
-                     removedLIR.setStackNode(null);
+                     System.out.println("L1073 removedLIR.stackNode=" + removedLIR.stackNode);
+//                     removedLIR.setStackNode(null);
                      DequeNode<LIRSNode<K, V>> queueNode = new DequeNode<>(removedLIR);
                      removedLIR.setQueueNode(queueNode);
                      queue.linkLast(queueNode);
@@ -1135,12 +1141,15 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
                case LIR_RESIDENT:
                   // Note we don't null out the stack because the caller once again
                   // does a check to make sure the stack pointer hasn't changed
+                  System.out.println("L1139 LIR_RESIDENT");
                   return nodeDetails;
                case HIR_NONRESIDENT:
                   // Non resident was already evicted and now it is no longer in the
                   // queue or the stack so it is effectively gone - however we want to
                   // remove the now null node
+                  System.out.println("L1145 removedLIR.setState(Recency.EVICTING)");
                   removedLIR.setState(Recency.EVICTING);
+//                  removedLIR.setState(Recency.HIR_NONRESIDENT);
                   Collection<LIRSNode<K, V>> nodesToEvict = nodesToEvictTL.get();
                   if (nodesToEvict == null) {
                      nodesToEvict = new ArrayList<>();
@@ -1148,14 +1157,16 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
                   }
                   nodesToEvict.add(removedLIR);
                case HIR_RESIDENT:
+                  System.out.println("L1154 HIR_RESIDENT");
                   // Leave it in the queue if it was a resident
-                  removedLIR.setStackNode(null);
+//                  removedLIR.setStackNode(null);
                   break;
                case REMOVED:
                case EVICTING:
                case EVICTED:
                   // We ignore this value if it it was evicted/removed elsewhere as it is
                   // no longer LIRS
+                  System.out.println("L1163 break");
                   break;
                }
             }
@@ -1200,6 +1211,7 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
 
       @Override
       public void onEntryHitRead(Node<K,V> e, V value) {
+         System.out.println("L1212 onEntryHitRead");
          boolean reAttempt = false;
          LIRSNode<K, V> lirsNode = (LIRSNode<K, V>) e.eviction;
          synchronized (lirsNode) {
@@ -1240,6 +1252,7 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
 
       @Override
       public void onEntryHitWrite(Node<K, V> e, V value) {
+         System.out.println("L1253 onEntryHitWrite");
          boolean demoteLIR = false;
          boolean evictHIR = false;
          LIRSNode<K, V> lirsNode = (LIRSNode<K, V>) e.eviction;
@@ -1366,6 +1379,7 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
 
       @Override
       public void onEntryRemove(Node<K, V> e) {
+         System.out.println("L1380 onEntryRemove");
          LIRSNode<K, V> lirsNode = (LIRSNode<K, V>) e.eviction;
          synchronized (lirsNode) {
             switch (lirsNode.state) {
@@ -1406,6 +1420,7 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
 
       @Override
       public Collection<Node<K, V>> findIfEntriesNeedEvicting() {
+         System.out.println("LIRS");
          long hotDemotions;
          while ((hotDemotions = hotDemotion.get()) > 0) {
             if (hotDemotion.compareAndSet(hotDemotions, 0)) {
@@ -1435,17 +1450,21 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
          // If this is non null it is also non empty
          Collection<LIRSNode<K, V>> tlEvicted = nodesToEvictTL.get();
          if (tlEvicted == null) {
+            System.out.println("L1447 tlEvicted == null");
             tlEvicted = Collections.emptyList();
          } else {
+            System.out.println("L1442 nodesToEvictTL.remove()");
             nodesToEvictTL.remove();
          }
          if (evictCount != 0 || !tlEvicted.isEmpty()) {
+            System.out.println("L1454");
             @SuppressWarnings("unchecked")
             LIRSNode<K, V>[] queueContents = new LIRSNode[evictCount + tlEvicted.size()];
             Iterator<LIRSNode<K, V>> tlIterator = tlEvicted.iterator();
             int offset = 0;
             while (tlIterator.hasNext()) {
                queueContents[evictCount + offset] = tlIterator.next();
+               System.out.println("L1461 queueContents[evictCount + offset]=" + queueContents[evictCount + offset]);
                offset++;
             }
             int evictedValues = evictCount;
@@ -1481,16 +1500,20 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
                         continue;
                      }
                      // Since we removed the queue node we need to null it out
-                     removedHIR.setQueueNode(null);
+//                     removedHIR.setQueueNode(null);
+                     System.out.println("L1493 removedHIR.state=" + removedHIR.state);
+                     System.out.println("L1494 removedHIR.stackNode=" + removedHIR.stackNode);
                      switch (removedHIR.state) {
                      case HIR_RESIDENT:
                         // If it is in the stack we set it to HIR non resident
                         if (removedHIR.stackNode != null) {
+                           System.out.println("L1496 removedHIR.setState(Recency.HIR_NONRESIDENT)");
                            removedHIR.setState(Recency.HIR_NONRESIDENT);
                            // We can't set the value to NULL_VALUE until we hold the
                            // lock below
                            queueContents[i] = removedHIR;
                         } else {
+                           System.out.println("L1502 removedHIR.setState(Recency.EVICTING)");
                            removedHIR.setState(Recency.EVICTING);
                            // It wasn't part of the stack so we have to remove it completely
                            // Note we don't null out the queue or stack nodes on the LIRSNode
@@ -1516,8 +1539,10 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
             }
             incrementSizeEviction(currentSize, -evictedValues, -decEvict);
             Collection<Node<K, V>> removedNodes = new ArrayList<>(queueContents.length);
+            System.out.println("L1541 queueContents.length=" + queueContents.length);
             for (int j = 0; j < queueContents.length; ++j) {
                LIRSNode<K, V> evict = queueContents[j];
+               System.out.println("L1523 evict.state=" + evict.state);
                // This can be null if the entry was removed when we tried to evict
                // or if we found a subsequent value in the same table
                if (evict == null) {
@@ -1547,11 +1572,13 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
                            if (tabAt(tab, i) == f) {
                               synchronized (evict) {
                                  if (evict.state == Recency.EVICTING) {
+                                    System.out.println("evict.state == Recency.EVICTING");
                                     evict.setState(Recency.EVICTED);
                                     V prevValue = map.replaceNode(evict.getKey(), null, null, true);
                                     removedNodes.add(new Node<>(-1, null, evict.getKey(),
                                           prevValue, null));
                                  } else if (evict.state == Recency.HIR_NONRESIDENT) {
+                                    System.out.println("evict.state == Recency.HIR_NONRESIDENT");
                                     Node<K, V> node = f.find(hash, evict.getKey());
                                     V prevValue = node.val;
                                     if (prevValue != NULL_VALUE) {
@@ -1570,9 +1597,12 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
                      }
                   }
                }
+               System.out.println("L1599");
             }
+            System.out.println("L1601");
             return removedNodes;
          }
+         System.out.println("L1604");
          return Collections.emptySet();
       }
 
@@ -2448,23 +2478,31 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
    @Override
    public V get(Object key) {
       Node<K,V>[] tab; Node<K,V> e, p; int n, eh; K ek;
-      int h = spread(keyEq.hashCode(key)); // EQUIVALENCE_MOD
+      int hashCode = keyEq.hashCode(key);
+      System.out.println("key=" + key + ", hashCode=" + hashCode);
+      int h = spread(hashCode); // EQUIVALENCE_MOD
+      System.out.println("key=" + key + ", h=" + h);
       if ((tab = table) != null && (n = tab.length) > 0 &&
             (e = tabAt(tab, (n - 1) & h)) != null) {
          if ((eh = e.hash) == h) {
+            System.out.println("L2458");
             if ((ek = e.key) == key || (ek != null && keyEq.equals(ek, key))) {// EQUIVALENCE_MOD
                V val = e.val;
                if (val != NULL_VALUE) {
                   evictionPolicy.onEntryHitRead(e, val);
+                  System.out.println("L2463 key=" + key + ", e.getKey()=" + e.getKey());
                   notifyEvictionListener(evictionPolicy.findIfEntriesNeedEvicting());
                   return val;
                }
                return null;
             }
+            System.out.println("L2469");
          }
          else if (eh < 0) {
+            System.out.println("L2470");
             V val = (p = e.find(h, key)) != null ? p.val : null;
             if (val != null && val != NULL_VALUE) {
+               System.out.println("L2473");
                evictionPolicy.onEntryHitRead(p, val);
                notifyEvictionListener(evictionPolicy.findIfEntriesNeedEvicting());
                return val;
@@ -2472,6 +2510,7 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
             return null;
          }
          while ((e = e.next) != null) {
+            System.out.println("L2481");
             if (e.hash == h &&
                   ((ek = e.key) == key || (ek != null && keyEq.equals(ek, key)))) { // EQUIVALENCE_MOD
                V val = e.val;
@@ -2484,6 +2523,7 @@ public class BoundedEquivalentConcurrentHashMapV8<K,V> extends AbstractMap<K,V>
             }
          }
       }
+      System.out.println("L2494");
       return null;
    }
 
